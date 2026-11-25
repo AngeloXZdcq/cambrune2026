@@ -20,63 +20,36 @@
 <div id="cargando">
   <div class="anillo" aria-hidden="true"></div>
   <b>Campaña Navideña Cambrune 2026</b>
-  <span id="estado">Cargando la campaña…</span>
+  <span id="estado">Cargando…</span>
 </div>
 <script>
 /*
- * Esta página solo "trae" la portada real desde Apps Script.
- * Pide el diseño y los datos SIN enviar las cuentas de Google del visitante
- * (credentials: 'omit'), así funciona aunque el celular tenga varias cuentas.
- * No hace falta volver a subir este archivo cuando cambie la portada.
+ * Esta página no tiene contenido propio: trae desde Apps Script la página real
+ * (portada, o el panel con ?page=panel / ?page=nueva) ya lista para funcionar.
+ * Todo se pide SIN las cuentas de Google del visitante, así abre aunque el
+ * celular tenga varias cuentas. No hace falta volver a subir este archivo.
  */
 (function () {
   'use strict';
   var API = 'https://script.google.com/macros/s/AKfycbz2N7O13kHE3g8svoV0wkAgFYCXk-V0bXTn8QmcfBajObSODB8umo_8LS7tPCkwl5A/exec';
-  var previo = null;
-
-  function llamar(nombre, args) {
-    var url = API + '?api=' + encodeURIComponent(nombre) + '&args=' + encodeURIComponent(JSON.stringify(args || []));
-    return fetch(url, {credentials: 'omit', redirect: 'follow'})
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function (j) { if (!j.ok) throw new Error(j.error || 'Error del servidor'); return j.r; });
-  }
-
-  // Imita google.script.run para que la portada funcione igual que en Apps Script.
-  function corredor(ok, falla) {
-    return new Proxy({}, {get: function (_, k) {
-      if (k === 'withSuccessHandler') return function (f) { return corredor(f, falla); };
-      if (k === 'withFailureHandler') return function (f) { return corredor(ok, f); };
-      if (k === 'withUserObject') return function () { return corredor(ok, falla); };
-      return function () {
-        var args = Array.prototype.slice.call(arguments);
-        var p = (k === 'getPublic' && previo) ? Promise.resolve(previo) : llamar(k, args);
-        if (k === 'getPublic') previo = null;
-        p.then(function (r) { if (ok) ok(r); }, function (e) { if (falla) falla(e); });
-      };
-    }});
-  }
-
-  function fallo() {
-    document.getElementById('estado').innerHTML =
-      'No se pudo cargar la página. Revisa tu conexión y <a href="">vuelve a intentarlo</a>.';
-  }
-
+  var pagina = (/[?&]page=(\w+)/.exec(location.search) || [])[1] || '';
   var intentos = 0;
+
   function cargar() {
-    llamar('portada').then(function (r) {
-      previo = r.datos || null;
-      window.google = {script: {run: corredor(null, null)}};
-      document.open();
-      document.write(r.html);
-      document.close();
-      document.title = 'Campaña Navideña Cambrune 2026';
-      if (r.logo) {
-        var l = document.createElement('link'); l.rel = 'icon'; l.href = r.logo;
-        (document.head || document.documentElement).appendChild(l);
-      }
-    }).catch(function () {
-      if (++intentos < 3) setTimeout(cargar, 1500); else fallo();
-    });
+    fetch(API + '?api=pagina&args=' + encodeURIComponent(JSON.stringify([pagina])), {credentials: 'omit', redirect: 'follow'})
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (j) {
+        if (!j.ok) throw new Error(j.error);
+        document.open();
+        document.write(j.r.html);
+        document.close();
+        document.title = j.r.titulo || document.title;
+      })
+      .catch(function () {
+        if (++intentos < 3) return setTimeout(cargar, 1500);
+        document.getElementById('estado').innerHTML =
+          'No se pudo cargar. Revisa tu conexión y <a href="">vuelve a intentarlo</a>.';
+      });
   }
   cargar();
 })();
